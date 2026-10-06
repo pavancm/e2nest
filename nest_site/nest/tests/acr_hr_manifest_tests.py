@@ -2,11 +2,13 @@ import csv
 import tempfile
 
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
 from nest.acr_hr_manifest import build_config, local_media_server_address
 from nest.subjective_study_aom import (
+    _migrate_study_database,
     create_parser,
     discover_media_layout,
     find_nest_repository,
@@ -29,6 +31,23 @@ class AcrHrManifestTests(SimpleTestCase):
     def test_finds_source_repository_for_experiment_creation(self):
         repository = find_nest_repository(Path(__file__).parent)
         self.assertTrue((repository / 'nest_site' / 'manage.py').is_file())
+
+    def test_fresh_study_syncs_apps_without_migrations(self):
+        site_root = self.root / 'repository' / 'nest_site'
+        site_root.mkdir(parents=True)
+        (site_root / 'manage.py').touch()
+        environment = {'DJANGO_SETTINGS_MODULE': 'nest_site.settings'}
+
+        with patch(
+                'nest.subjective_study_aom.subprocess.run') as run_command:
+            _migrate_study_database(site_root, environment)
+
+        command = run_command.call_args.args[0]
+        self.assertEqual(command[-3:], ['migrate', '--noinput',
+                                        '--run-syncdb'])
+        self.assertEqual(run_command.call_args.kwargs['cwd'], site_root)
+        self.assertEqual(run_command.call_args.kwargs['env'], environment)
+        self.assertTrue(run_command.call_args.kwargs['check'])
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

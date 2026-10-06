@@ -168,6 +168,13 @@ def _write_manifest(rows, path):
         writer.writerows(rows)
 
 
+def _migrate_study_database(site_root, environment):
+    subprocess.run(
+        [sys.executable, str(site_root / 'manage.py'), 'migrate', '--noinput',
+         '--run-syncdb'],
+        cwd=site_root, env=environment, check=True)
+
+
 def _prepare_study(repository, config_path, config):
     repository = Path(repository)
     site_root = repository / 'nest_site'
@@ -176,9 +183,7 @@ def _prepare_study(repository, config_path, config):
     environment.setdefault('DJANGO_SETTINGS_MODULE', 'nest_site.settings')
     title = config['experiment_config']['title']
     environment['NEST_ACTIVE_EMAIL_EXPERIMENT'] = title
-    subprocess.run(
-        [sys.executable, str(site_root / 'manage.py'), 'migrate', '--noinput'],
-        cwd=site_root, env=environment, check=True)
+    _migrate_study_database(site_root, environment)
 
     database_path = site_root / 'db.sqlite3'
     with sqlite3.connect(database_path) as database:
