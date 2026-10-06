@@ -51,6 +51,10 @@ subjective_study_aom run \
   --media-root /path/to/my-media
 ```
 
+NEST serves the study interface on port 8000 by default. If that port is in
+use, select another loopback port, for example `--study-port 8001`. The media
+server port remains independently configurable with `--media-base-url`.
+
 Enter any valid email address. Scores are retained in `nest_site/db.sqlite3`.
 Press Ctrl-C in the terminal to stop both servers.
 
@@ -80,7 +84,9 @@ Install the repository once from its root so the command is available in the
 active virtual environment:
 
 ```bash
-python3 -m pip install .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
 ```
 
 Then run:

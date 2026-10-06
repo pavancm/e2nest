@@ -21,8 +21,6 @@ from nest.acr_hr_manifest import (
 )
 
 
-STUDY_URL = 'http://127.0.0.1:8000/login/'
-STUDY_START_URL = 'http://127.0.0.1:8000/logout/?next=/login/'
 EXPERIMENT_NAME_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$')
 MANIFEST_FIELDS = [
     'role', 'path', 'source_id', 'condition_id', 'label',
@@ -47,6 +45,9 @@ def create_parser():
     parser.add_argument('--title')
     parser.add_argument('--site-id')
     parser.add_argument(
+        '--study-port', type=int, default=8000,
+        help='loopback port for the NEST study interface (default: 8000)')
+    parser.add_argument(
         '--media-base-url', default='http://localhost:8093',
         help='URL from which the viewing workstation serves media')
     parser.add_argument('--protocol-version', default='acr-hr-v1')
@@ -59,6 +60,13 @@ def create_parser():
         help='serve media on loopback after building/creating the experiment; '
              'runs until Ctrl-C')
     return parser
+
+
+def local_study_urls(study_port):
+    if not 1 <= study_port <= 65535:
+        raise ValueError('--study-port must be between 1 and 65535')
+    base_url = f'http://127.0.0.1:{study_port}'
+    return f'{base_url}/login/', f'{base_url}/logout/?next=/login/'
 
 
 def find_nest_repository(start=None):
@@ -206,25 +214,26 @@ def _prepare_study(repository, config_path, config):
 
 
 def _run_servers(site_root, environment, database_path, media_root,
-                 media_base_url, title):
+                 media_base_url, title, study_port):
+    study_url, study_start_url = local_study_urls(study_port)
     media_server = create_local_media_server(media_root, media_base_url)
     media_thread = threading.Thread(
         target=media_server.serve_forever, daemon=True)
     media_thread.start()
 
-    print(f'\nAOM subjective study {title!r}: {STUDY_URL}')
+    print(f'\nAOM subjective study {title!r}: {study_url}')
     print('Enter any valid email address to begin.')
     print(f'Scores are saved in {database_path}')
     print('Press Ctrl-C to stop the study.\n')
     # Going through logout makes switching between locally run experiments
     # deterministic even if the browser still has an older NEST session.
     browser_timer = threading.Timer(
-        1.0, webbrowser.open, args=(STUDY_START_URL,))
+        1.0, webbrowser.open, args=(study_start_url,))
     browser_timer.daemon = True
     browser_timer.start()
     server = subprocess.Popen(
         [sys.executable, str(site_root / 'manage.py'), 'runserver',
-         '127.0.0.1:8000', '--noreload'],
+         f'127.0.0.1:{study_port}', '--noreload'],
         cwd=site_root, env=environment)
     try:
         return_code = server.wait()
@@ -242,11 +251,12 @@ def _run_servers(site_root, environment, database_path, media_root,
 
 
 def run_study(experiment, media_root, site_id, media_base_url,
-              protocol_version):
+              protocol_version, study_port=8000):
     if EXPERIMENT_NAME_PATTERN.fullmatch(experiment) is None:
         raise ValueError(
             '--experiment must use only letters, numbers, hyphens, and '
             'underscores, and must begin with a letter or number')
+    local_study_urls(study_port)
     repository = find_nest_repository()
     rows = discover_media_layout(media_root)
     with tempfile.TemporaryDirectory(prefix='subjective-study-aom-') as work:
@@ -269,7 +279,7 @@ def run_study(experiment, media_root, site_id, media_base_url,
             'calibration clips.')
         _run_servers(
             site_root, environment, database_path, media_root,
-            media_base_url, title)
+            media_base_url, title, study_port)
     return experiment
 
 
@@ -300,7 +310,8 @@ def main(argv=None):
                 media_root=args.media_root,
                 site_id=args.site_id or 'local-site',
                 media_base_url=args.media_base_url,
-                protocol_version=args.protocol_version)
+                protocol_version=args.protocol_version,
+                study_port=args.study_port)
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             parser.error(f'could not run study: {error}')
         return

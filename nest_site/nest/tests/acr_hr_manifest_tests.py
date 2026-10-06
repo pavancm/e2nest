@@ -12,6 +12,7 @@ from nest.subjective_study_aom import (
     create_parser,
     discover_media_layout,
     find_nest_repository,
+    local_study_urls,
 )
 
 
@@ -23,10 +24,19 @@ class AcrHrManifestTests(SimpleTestCase):
     def test_run_command_exposes_experiment_and_media_root(self):
         args = create_parser().parse_args([
             'run', '--experiment', 'ai-extension-study',
-            '--media-root', '/media'])
+            '--media-root', '/media', '--study-port', '8001'])
         self.assertEqual(args.command, 'run')
         self.assertEqual(args.experiment, 'ai-extension-study')
         self.assertEqual(args.media_root, '/media')
+        self.assertEqual(args.study_port, 8001)
+
+    def test_builds_study_urls_from_configurable_port(self):
+        self.assertEqual(
+            local_study_urls(8001),
+            ('http://127.0.0.1:8001/login/',
+             'http://127.0.0.1:8001/logout/?next=/login/'))
+        with self.assertRaisesRegex(ValueError, 'between 1 and 65535'):
+            local_study_urls(0)
 
     def test_finds_source_repository_for_experiment_creation(self):
         repository = find_nest_repository(Path(__file__).parent)
